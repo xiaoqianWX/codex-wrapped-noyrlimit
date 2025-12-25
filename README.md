@@ -136,4 +136,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 Built for the Codex community
 
+Credit: <a href="https://github.com/ryoppippi/ccusage">ccusage</a>
+
 </div>
