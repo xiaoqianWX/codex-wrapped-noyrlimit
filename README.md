@@ -7,7 +7,7 @@
 <p>
   <strong>Credit:</strong> Built on top of
   <a href="https://github.com/moddi3/opencode-wrapped">opencode-wrapped</a>
-  by <a href="https://x.com/moddi3io">moddi3</a> (<a href="https://x.com/moddi3io">@moddi3io</a>).
+  by moddi3 (<a href="https://x.com/moddi3io">@moddi3io</a>).
 </p>
 <p>
   Found this useful? Follow <a href="https://x.com/nummanali">@nummanali</a> for more AI tooling!

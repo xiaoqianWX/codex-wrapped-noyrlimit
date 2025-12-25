@@ -162,7 +162,7 @@ function Header({ year, logoDataUrl }: { year: number; logoDataUrl?: string | nu
         >
           <span
             style={{
-              fontSize: typography.size["xl"],
+              fontSize: typography.size["3xl"],
               fontWeight: typography.weight.medium,
               letterSpacing: typography.letterSpacing.normal,
               color: colors.text.tertiary,
@@ -173,7 +173,7 @@ function Header({ year, logoDataUrl }: { year: number; logoDataUrl?: string | nu
           </span>
           <span
             style={{
-              fontSize: typography.size["xl"],
+              fontSize: typography.size["3xl"],
               fontWeight: typography.weight.bold,
               letterSpacing: typography.letterSpacing.normal,
               color: colors.accent.primary,
