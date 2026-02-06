@@ -102,17 +102,19 @@ export async function getCodexFirstPromptTimestamp(): Promise<number | null> {
 
 export async function collectCodexUsageData(year: number): Promise<CodexUsageData> {
   const files = await listCodexSessionFiles(year);
-  const events: CodexUsageEvent[] = [];
-  const dailyActivity = new Map<string, number>();
-  const projects = new Set<string>();
-  let totalMessages = 0;
-  let earliestSessionDate: Date | null = null;
+  const sessions: SessionUsage[] = [];
 
   for (const filePath of files) {
     let previousTotals: RawUsage | null = null;
     let currentModel: string | undefined;
     let currentModelIsFallback = false;
     let legacyFallbackUsed = false;
+    let sessionDate: Date | null = null;
+    let sessionCwd: string | undefined;
+    let sessionId: string | undefined;
+    let forkedFromId: string | undefined;
+    const userMessages: SessionUserMessage[] = [];
+    const sessionEvents: CodexUsageEvent[] = [];
 
     const rl = createInterface({
       input: createReadStream(filePath),
@@ -132,16 +134,29 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
       const entryType = entry?.type;
 
       if (entryType === "session_meta") {
+        const metaPayload = entry?.payload;
         const sessionTimestamp = entry?.payload?.timestamp ?? entry?.timestamp;
         if (sessionTimestamp) {
-          const sessionDate = new Date(sessionTimestamp);
-          if (!earliestSessionDate || sessionDate < earliestSessionDate) {
-            earliestSessionDate = sessionDate;
+          const parsedDate = new Date(sessionTimestamp);
+          if (!sessionDate || parsedDate < sessionDate) {
+            sessionDate = parsedDate;
           }
         }
         const cwd = entry?.payload?.cwd;
         if (cwd) {
-          projects.add(cwd);
+          sessionCwd = cwd;
+        }
+        if (!sessionId) {
+          const parsedSessionId = asNonEmptyString(metaPayload?.id);
+          if (parsedSessionId) {
+            sessionId = parsedSessionId;
+          }
+        }
+        if (!forkedFromId) {
+          const parsedForkedFromId = asNonEmptyString(metaPayload?.forked_from_id);
+          if (parsedForkedFromId) {
+            forkedFromId = parsedForkedFromId;
+          }
         }
         continue;
       }
@@ -158,11 +173,12 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
       if (entryType === "event_msg") {
         const payload = entry?.payload;
         if (payload?.type === "user_message") {
-          totalMessages += 1;
           const timestamp = entry?.timestamp;
           if (timestamp) {
-            const dateKey = formatDateKey(new Date(timestamp));
-            dailyActivity.set(dateKey, (dailyActivity.get(dateKey) || 0) + 1);
+            userMessages.push({
+              timestamp,
+              signature: createUserMessageSignature(payload),
+            });
           }
           continue;
         }
@@ -217,7 +233,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
           isFallback = true;
         }
 
-        events.push({
+        sessionEvents.push({
           timestamp,
           model,
           inputTokens: delta.inputTokens,
@@ -235,6 +251,88 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
 
     if (legacyFallbackUsed) {
       // ignore - best-effort
+    }
+
+    sessions.push({
+      filePath,
+      cwd: sessionCwd,
+      sessionId,
+      forkedFromId,
+      sessionDate,
+      userMessages,
+      messageSignatures: userMessages.map((message) => message.signature),
+      events: sessionEvents,
+      tokenSignatures: sessionEvents.map(createTokenEventSignature),
+    });
+  }
+
+  const events: CodexUsageEvent[] = [];
+  const dailyActivity = new Map<string, number>();
+  const projects = new Set<string>();
+  let totalMessages = 0;
+  let earliestSessionDate: Date | null = null;
+  const priorSessionsByCwd = new Map<string, SessionDedupSignatures[]>();
+  const sessionsById = new Map<string, SessionDedupSignatures>();
+
+  sessions.sort(compareSessionsByDate);
+
+  for (const session of sessions) {
+    if (session.cwd) {
+      projects.add(session.cwd);
+    }
+
+    if (session.sessionDate && (!earliestSessionDate || session.sessionDate < earliestSessionDate)) {
+      earliestSessionDate = session.sessionDate;
+    }
+
+    let messageStartIndex = 0;
+    let tokenStartIndex = 0;
+    const parentSession = session.forkedFromId ? sessionsById.get(session.forkedFromId) : undefined;
+
+    if (parentSession) {
+      const messageOverlap = commonPrefixLength(session.messageSignatures, parentSession.messageSignatures);
+      messageStartIndex = messageOverlap;
+
+      const tokenOverlap = commonPrefixLength(session.tokenSignatures, parentSession.tokenSignatures);
+      tokenStartIndex = tokenOverlap;
+    } else if (session.cwd) {
+      const previousSessions = priorSessionsByCwd.get(session.cwd) ?? [];
+      const messageOverlap = findLargestPrefixOverlap(
+        session.messageSignatures,
+        previousSessions.map((item) => item.messageSignatures)
+      );
+      if (shouldApplyForkDedup(messageOverlap, session.messageSignatures.length)) {
+        messageStartIndex = messageOverlap;
+      }
+
+      const tokenOverlap = findLargestPrefixOverlap(
+        session.tokenSignatures,
+        previousSessions.map((item) => item.tokenSignatures)
+      );
+      if (shouldApplyForkDedup(tokenOverlap, session.tokenSignatures.length)) {
+        tokenStartIndex = tokenOverlap;
+      }
+
+      previousSessions.push({
+        messageSignatures: session.messageSignatures,
+        tokenSignatures: session.tokenSignatures,
+      });
+      priorSessionsByCwd.set(session.cwd, previousSessions);
+    }
+
+    for (const message of session.userMessages.slice(messageStartIndex)) {
+      totalMessages += 1;
+      const dateKey = formatDateKey(new Date(message.timestamp));
+      dailyActivity.set(dateKey, (dailyActivity.get(dateKey) || 0) + 1);
+    }
+
+    events.push(...session.events.slice(tokenStartIndex));
+
+    if (session.sessionId) {
+      sessionsById.set(session.sessionId, {
+        messageSignatures: session.messageSignatures,
+        tokenSignatures: session.tokenSignatures,
+      });
     }
   }
 
@@ -258,7 +356,28 @@ type RawUsage = {
   total_tokens: number;
 };
 
+type SessionUserMessage = {
+  timestamp: string;
+  signature: string;
+};
+
+type SessionDedupSignatures = {
+  messageSignatures: string[];
+  tokenSignatures: string[];
+};
+
+type SessionUsage = SessionDedupSignatures & {
+  filePath: string;
+  cwd?: string;
+  sessionId?: string;
+  forkedFromId?: string;
+  sessionDate: Date | null;
+  userMessages: SessionUserMessage[];
+  events: CodexUsageEvent[];
+};
+
 const LEGACY_FALLBACK_MODEL = "gpt-5";
+const FORK_PREFIX_MIN_MATCH = 3;
 
 function ensureNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -337,6 +456,75 @@ function asNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
   return trimmed === "" ? undefined : trimmed;
+}
+
+function createUserMessageSignature(payload: Record<string, unknown>): string {
+  const message = asNonEmptyString(payload.message) ?? "";
+  const textElements = Array.isArray(payload.text_elements) ? payload.text_elements : [];
+  const imageCount = Array.isArray(payload.images) ? payload.images.length : 0;
+  const localImageCount = Array.isArray(payload.local_images) ? payload.local_images.length : 0;
+  return JSON.stringify({
+    message,
+    textElements,
+    imageCount,
+    localImageCount,
+  });
+}
+
+function createTokenEventSignature(event: CodexUsageEvent): string {
+  return [
+    event.model,
+    event.inputTokens,
+    event.cachedInputTokens,
+    event.outputTokens,
+    event.reasoningOutputTokens,
+    event.totalTokens,
+  ].join("|");
+}
+
+function compareSessionsByDate(a: SessionUsage, b: SessionUsage): number {
+  const aTime = a.sessionDate?.getTime();
+  const bTime = b.sessionDate?.getTime();
+
+  if (aTime != null && bTime != null && aTime !== bTime) {
+    return aTime - bTime;
+  }
+  if (aTime != null && bTime == null) return -1;
+  if (aTime == null && bTime != null) return 1;
+  return a.filePath.localeCompare(b.filePath);
+}
+
+function shouldApplyForkDedup(overlap: number, sequenceLength: number): boolean {
+  if (overlap < FORK_PREFIX_MIN_MATCH) return false;
+  if (sequenceLength <= 4) {
+    return overlap === sequenceLength;
+  }
+  return true;
+}
+
+function findLargestPrefixOverlap(sequence: string[], candidateSequences: string[][]): number {
+  if (sequence.length === 0 || candidateSequences.length === 0) return 0;
+
+  let best = 0;
+  for (const candidate of candidateSequences) {
+    if (candidate.length === 0) continue;
+    const overlap = commonPrefixLength(sequence, candidate);
+    if (overlap > best) {
+      best = overlap;
+      if (best === sequence.length) return best;
+    }
+  }
+
+  return best;
+}
+
+function commonPrefixLength(left: string[], right: string[]): number {
+  const limit = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < limit && left[index] === right[index]) {
+    index += 1;
+  }
+  return index;
 }
 
 function formatDateKey(date: Date): string {
