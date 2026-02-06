@@ -95,6 +95,14 @@ Codex Wrapped reads data from your local Codex CLI installation:
 
 No data is sent anywhere. Everything is processed locally.
 
+Token pricing for cost estimates is also local and versioned in:
+
+```
+src/pricing-data.ts
+```
+
+If a model is missing from that table, cost is treated as unavailable for that model until it is added in a new release.
+
 ## Building
 
 ### Development
