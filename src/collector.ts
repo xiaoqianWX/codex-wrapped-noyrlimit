@@ -40,8 +40,29 @@ export async function checkCodexDataExists(): Promise<boolean> {
 
 export async function listCodexSessionFiles(year: number): Promise<string[]> {
   const yearPath = join(CODEX_SESSIONS_PATH, String(year));
-  const files: string[] = [];
+  return listCodexSessionFilesInDirectory(yearPath);
+}
 
+async function listAllCodexSessionFiles(): Promise<string[]> {
+  const files: string[] = [];
+  let yearDirs: Array<string> = [];
+  try {
+    const entries = await readdir(CODEX_SESSIONS_PATH, { withFileTypes: true });
+    yearDirs = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+  } catch {
+    return files;
+  }
+
+  for (const yearDir of yearDirs) {
+    const yearPath = join(CODEX_SESSIONS_PATH, yearDir);
+    files.push(...(await listCodexSessionFilesInDirectory(yearPath)));
+  }
+
+  return files;
+}
+
+async function listCodexSessionFilesInDirectory(yearPath: string): Promise<string[]> {
+  const files: string[] = [];
   let monthDirs: Array<string> = [];
   try {
     const entries = await readdir(yearPath, { withFileTypes: true });
@@ -101,7 +122,7 @@ export async function getCodexFirstPromptTimestamp(): Promise<number | null> {
 }
 
 export async function collectCodexUsageData(year: number): Promise<CodexUsageData> {
-  const files = await listCodexSessionFiles(year);
+  const files = await listAllCodexSessionFiles();
   const sessions: SessionUsage[] = [];
 
   for (const filePath of files) {
@@ -174,7 +195,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
         const payload = entry?.payload;
         if (payload?.type === "user_message") {
           const timestamp = entry?.timestamp;
-          if (timestamp) {
+          if (timestamp && isTimestampInYear(timestamp, year)) {
             userMessages.push({
               timestamp,
               signature: createUserMessageSignature(payload),
@@ -189,6 +210,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
 
         const timestamp = entry?.timestamp;
         if (!timestamp) continue;
+        const inTargetYear = isTimestampInYear(timestamp, year);
 
         const info = payload?.info;
         const lastUsage = normalizeRawUsage(info?.last_token_usage);
@@ -233,6 +255,10 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
           isFallback = true;
         }
 
+        if (!inTargetYear) {
+          continue;
+        }
+
         sessionEvents.push({
           timestamp,
           model,
@@ -259,6 +285,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
       sessionId,
       forkedFromId,
       sessionDate,
+      hasYearActivity: userMessages.length > 0 || sessionEvents.length > 0,
       userMessages,
       messageSignatures: userMessages.map((message) => message.signature),
       events: sessionEvents,
@@ -270,6 +297,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
   const dailyActivity = new Map<string, number>();
   const projects = new Set<string>();
   let totalMessages = 0;
+  let totalSessions = 0;
   let earliestSessionDate: Date | null = null;
   const priorSessionsByCwd = new Map<string, SessionDedupSignatures[]>();
   const sessionsById = new Map<string, SessionDedupSignatures>();
@@ -277,12 +305,15 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
   sessions.sort(compareSessionsByDate);
 
   for (const session of sessions) {
-    if (session.cwd) {
-      projects.add(session.cwd);
-    }
-
     if (session.sessionDate && (!earliestSessionDate || session.sessionDate < earliestSessionDate)) {
       earliestSessionDate = session.sessionDate;
+    }
+
+    if (session.hasYearActivity) {
+      totalSessions += 1;
+      if (session.cwd) {
+        projects.add(session.cwd);
+      }
     }
 
     let messageStartIndex = 0;
@@ -342,7 +373,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
     events,
     dailyActivity,
     totalMessages,
-    totalSessions: files.length,
+    totalSessions,
     projects,
     earliestSessionDate,
   };
@@ -372,6 +403,7 @@ type SessionUsage = SessionDedupSignatures & {
   sessionId?: string;
   forkedFromId?: string;
   sessionDate: Date | null;
+  hasYearActivity: boolean;
   userMessages: SessionUserMessage[];
   events: CodexUsageEvent[];
 };
@@ -525,6 +557,14 @@ function commonPrefixLength(left: string[], right: string[]): number {
     index += 1;
   }
   return index;
+}
+
+function isTimestampInYear(timestamp: string, year: number): boolean {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+  return date.getFullYear() === year;
 }
 
 function formatDateKey(date: Date): string {
