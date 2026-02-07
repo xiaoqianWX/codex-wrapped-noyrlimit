@@ -339,29 +339,38 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
       const tokenOverlap = commonPrefixLength(session.tokenSignatures, parentSession.tokenSignatures);
       tokenStartIndex = tokenOverlap;
     } else if (session.cwd) {
-      const previous = priorSessionsByCwd.get(session.cwd) ?? { messageSequences: [], tokenSequences: [] };
+      const previous = priorSessionsByCwd.get(session.cwd) ?? {
+        messageCandidatesByPrefix: new Map<string, string[][]>(),
+        tokenCandidatesByPrefix: new Map<string, string[][]>(),
+      };
 
       if (session.messageSignatures.length > 0) {
-        const messageOverlap = findLargestPrefixOverlap(session.messageSignatures, previous.messageSequences);
-        if (shouldApplyForkDedup(messageOverlap, session.messageSignatures.length)) {
-          messageStartIndex = messageOverlap;
+        const messageCandidates = getCandidateSequences(previous.messageCandidatesByPrefix, session.messageSignatures);
+        if (messageCandidates.length > 0) {
+          const messageOverlap = findLargestPrefixOverlap(session.messageSignatures, messageCandidates);
+          if (shouldApplyForkDedup(messageOverlap, session.messageSignatures.length)) {
+            messageStartIndex = messageOverlap;
+          }
         }
       }
 
       if (session.tokenSignatures.length > 0) {
-        const tokenOverlap = findLargestPrefixOverlap(session.tokenSignatures, previous.tokenSequences);
-        if (shouldApplyForkDedup(tokenOverlap, session.tokenSignatures.length)) {
-          tokenStartIndex = tokenOverlap;
+        const tokenCandidates = getCandidateSequences(previous.tokenCandidatesByPrefix, session.tokenSignatures);
+        if (tokenCandidates.length > 0) {
+          const tokenOverlap = findLargestPrefixOverlap(session.tokenSignatures, tokenCandidates);
+          if (shouldApplyForkDedup(tokenOverlap, session.tokenSignatures.length)) {
+            tokenStartIndex = tokenOverlap;
+          }
         }
       }
 
+      if (session.messageSignatures.length > 0) {
+        addSequenceToPrefixIndex(previous.messageCandidatesByPrefix, session.messageSignatures);
+      }
+      if (session.tokenSignatures.length > 0) {
+        addSequenceToPrefixIndex(previous.tokenCandidatesByPrefix, session.tokenSignatures);
+      }
       if (session.messageSignatures.length > 0 || session.tokenSignatures.length > 0) {
-        if (session.messageSignatures.length > 0) {
-          previous.messageSequences.push(session.messageSignatures);
-        }
-        if (session.tokenSignatures.length > 0) {
-          previous.tokenSequences.push(session.tokenSignatures);
-        }
         priorSessionsByCwd.set(session.cwd, previous);
       }
     }
@@ -413,8 +422,8 @@ type SessionDedupSignatures = {
 };
 
 type CwdDedupIndex = {
-  messageSequences: string[][];
-  tokenSequences: string[][];
+  messageCandidatesByPrefix: Map<string, string[][]>;
+  tokenCandidatesByPrefix: Map<string, string[][]>;
 };
 
 type SessionUsage = SessionDedupSignatures & {
@@ -568,6 +577,43 @@ function findLargestPrefixOverlap(sequence: string[], candidateSequences: string
   }
 
   return best;
+}
+
+function getCandidateSequences(index: Map<string, string[][]>, sequence: string[]): string[][] {
+  const prefixKey = createPrefixKey(sequence);
+  if (!prefixKey) {
+    return [];
+  }
+  return index.get(prefixKey) ?? [];
+}
+
+function addSequenceToPrefixIndex(index: Map<string, string[][]>, sequence: string[]): void {
+  const prefixKey = createPrefixKey(sequence);
+  if (!prefixKey) {
+    return;
+  }
+  const existing = index.get(prefixKey);
+  if (existing) {
+    existing.push(sequence);
+    return;
+  }
+  index.set(prefixKey, [sequence]);
+}
+
+function createPrefixKey(sequence: string[]): string | null {
+  if (sequence.length < FORK_PREFIX_MIN_MATCH) {
+    return null;
+  }
+  return sequence.slice(0, FORK_PREFIX_MIN_MATCH).map(fingerprintSignature).join("\u0001");
+}
+
+function fingerprintSignature(signature: string): string {
+  if (signature.length <= 80) {
+    return signature;
+  }
+  const start = signature.slice(0, 40);
+  const end = signature.slice(-20);
+  return `${start}#${signature.length}#${end}`;
 }
 
 function commonPrefixLength(left: string[], right: string[]): number {
