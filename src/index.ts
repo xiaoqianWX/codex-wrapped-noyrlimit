@@ -11,9 +11,10 @@ import { displayInTerminal, getTerminalName } from "./terminal/display";
 import { copyImageToClipboard } from "./clipboard";
 import { isWrappedAvailable } from "./utils/dates";
 import { formatCostFull, formatNumber, formatNumberFull } from "./utils/format";
+import { startDashboard } from "./web/server";
 import type { CodexStats } from "./types";
 
-const VERSION = "1.0.8";
+const VERSION = "1.0.10";
 
 function printHelp() {
   console.log(`
@@ -26,12 +27,14 @@ USAGE:
 
 OPTIONS:
   --year <YYYY>    Generate wrapped for a specific year (default: current year)
+  --web, -w        Open interactive dashboard in browser
   --help, -h       Show this help message
   --version, -v    Show version number
 
 EXAMPLES:
   codex-wrapped-noyrlimit              # Generate current year wrapped
   codex-wrapped-noyrlimit --year 2025  # Generate 2025 wrapped
+  codex-wrapped-noyrlimit --web        # Open interactive web dashboard
 `);
 }
 
@@ -41,6 +44,7 @@ async function main() {
     args: process.argv.slice(2),
     options: {
       year: { type: "string", short: "y" },
+      web: { type: "boolean", short: "w" },
       help: { type: "boolean", short: "h" },
       version: { type: "boolean", short: "v" },
     },
@@ -98,6 +102,12 @@ async function main() {
   }
 
   spinner.stop("Found your stats!");
+
+  // Web dashboard mode
+  if (values.web) {
+    await startDashboard(stats, requestedYear);
+    return; // unreachable, but satisfies TS
+  }
 
   // Display summary
   const summaryLines = [

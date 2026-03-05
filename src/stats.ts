@@ -99,7 +99,7 @@ export async function calculateStats(year: number): Promise<CodexStats> {
     firstSessionDate = historyDate;
   }
   const daysSinceFirstSession = Math.floor((Date.now() - firstSessionDate.getTime()) / (1000 * 60 * 60 * 24));
-  const totalCost = await calculateUsageCost(modelUsageTotals);
+  const { totalCost, dailyCost } = await calculateUsageCostWithDaily(usageData.events);
 
   return {
     year,
@@ -121,6 +121,7 @@ export async function calculateStats(year: number): Promise<CodexStats> {
     currentStreak,
     maxStreakDays,
     dailyActivity,
+    dailyCost,
     mostActiveDay,
     weekdayActivity,
   };
@@ -161,37 +162,46 @@ function getOrCreateModelUsage(map: Map<string, ModelUsageTotals>, modelId: stri
   return fresh;
 }
 
-async function calculateUsageCost(modelUsageTotals: Map<string, ModelUsageTotals>): Promise<number> {
+async function calculateUsageCostWithDaily(
+  events: CodexUsageEvent[]
+): Promise<{ totalCost: number; dailyCost: Map<string, number> }> {
   let totalCost = 0;
+  const dailyCost = new Map<string, number>();
+  const pricingCache = new Map<string, Awaited<ReturnType<typeof getModelPricing>>>();
 
-  for (const [modelId, usage] of modelUsageTotals.entries()) {
+  for (const event of events) {
     if (
-      usage.inputTokens === 0 &&
-      usage.cachedInputTokens === 0 &&
-      usage.outputTokens === 0 &&
-      usage.reasoningTokens === 0
+      event.inputTokens === 0 &&
+      event.cachedInputTokens === 0 &&
+      event.outputTokens === 0
     ) {
       continue;
     }
 
-    const pricing = await getModelPricing(modelId);
+    let pricing = pricingCache.get(event.model);
+    if (pricing === undefined) {
+      pricing = await getModelPricing(event.model);
+      pricingCache.set(event.model, pricing);
+    }
     if (!pricing) continue;
 
     const cost = calculateCostUSD(
       {
-        inputTokens: usage.inputTokens,
-        cachedInputTokens: usage.cachedInputTokens,
-        outputTokens: usage.outputTokens,
+        inputTokens: event.inputTokens,
+        cachedInputTokens: event.cachedInputTokens,
+        outputTokens: event.outputTokens,
       },
       pricing
     );
 
-    if (Number.isFinite(cost)) {
+    if (Number.isFinite(cost) && cost > 0) {
       totalCost += cost;
+      const dateKey = formatDateKey(new Date(event.timestamp));
+      dailyCost.set(dateKey, (dailyCost.get(dateKey) || 0) + cost);
     }
   }
 
-  return totalCost;
+  return { totalCost, dailyCost };
 }
 
 function calculateStreaks(
