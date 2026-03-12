@@ -9,6 +9,7 @@ const CODEX_HISTORY_PATH = join(CODEX_DATA_PATH, "history.jsonl");
 const CODEX_SESSIONS_PATH = join(CODEX_DATA_PATH, "sessions");
 
 export interface CodexUsageEvent {
+  sessionKey: string;
   timestamp: string;
   model: string;
   inputTokens: number;
@@ -264,6 +265,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
         }
 
         sessionEvents.push({
+          sessionKey: sessionId ?? filePath,
           timestamp,
           model,
           inputTokens: delta.inputTokens,
@@ -464,7 +466,7 @@ function subtractRawUsage(current: RawUsage, previous: RawUsage | null): RawUsag
   };
 }
 
-function convertToDelta(raw: RawUsage): Omit<CodexUsageEvent, "timestamp" | "model"> {
+function convertToDelta(raw: RawUsage): Omit<CodexUsageEvent, "sessionKey" | "timestamp" | "model"> {
   const total = raw.total_tokens > 0 ? raw.total_tokens : raw.input_tokens + raw.output_tokens;
   const cached = Math.min(raw.cached_input_tokens, raw.input_tokens);
   return {
