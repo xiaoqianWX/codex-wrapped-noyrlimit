@@ -62,7 +62,7 @@ describe("calculateUsageCostFromEvents", () => {
       }),
     ]);
 
-    expect(cost).toBeCloseTo(3.55, 8);
+    expect(cost).toBeCloseTo(3.575, 8);
   });
 
   test("keeps normal and long-context GPT-5.4 sessions separate", async () => {

@@ -1,7 +1,11 @@
-export interface LocalModelPricing {
+export interface LocalModelPricingDetails {
   inputCostPerMToken: number;
   cachedInputCostPerMToken?: number;
   outputCostPerMToken: number;
+}
+
+export interface LocalModelPricing extends LocalModelPricingDetails {
+  longContextPricing?: LocalModelPricingDetails;
 }
 
 // Maintained pricing table.
@@ -57,6 +61,15 @@ export const LOCAL_MODEL_PRICING: Record<string, LocalModelPricing> = {
     inputCostPerMToken: 2.5,
     cachedInputCostPerMToken: 0.25,
     outputCostPerMToken: 15,
+    longContextPricing: {
+      inputCostPerMToken: 5,
+      cachedInputCostPerMToken: 0.5,
+      outputCostPerMToken: 22.5,
+    },
   },
-
+  "gpt-5.4-mini": {
+    inputCostPerMToken: 0.75,
+    cachedInputCostPerMToken: 0.075,
+    outputCostPerMToken: 4.5,
+  },
 };

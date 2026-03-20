@@ -1,4 +1,8 @@
-import { LOCAL_MODEL_PRICING, type LocalModelPricing } from "./pricing-data";
+import {
+  LOCAL_MODEL_PRICING,
+  type LocalModelPricing,
+  type LocalModelPricingDetails,
+} from "./pricing-data";
 
 export interface ModelPricing {
   inputCostPerMToken: number;
@@ -29,7 +33,7 @@ export async function getModelPricing(model: string, options: ModelPricingOption
   for (const candidate of candidates) {
     const record = LOCAL_PRICING_MAP.get(candidate);
     if (record) {
-      return normalizePricing(record, candidate, options);
+      return normalizePricing(record, options);
     }
   }
 
@@ -88,24 +92,26 @@ function stripSnapshotSuffix(model: string): string {
 
 function normalizePricing(
   record: LocalModelPricing,
-  resolvedModel: string,
   options: ModelPricingOptions
 ): ModelPricing {
-  const pricing = {
-    inputCostPerMToken: record.inputCostPerMToken,
-    cachedInputCostPerMToken: record.cachedInputCostPerMToken ?? record.inputCostPerMToken,
-    outputCostPerMToken: record.outputCostPerMToken,
-  };
-
-  if (options.longContext && supportsLongContextPricing(resolvedModel)) {
-    pricing.inputCostPerMToken *= 2;
-    pricing.outputCostPerMToken *= 1.5;
+  if (options.longContext && record.longContextPricing) {
+    return toModelPricing(record.longContextPricing, record);
   }
 
-  return pricing;
+  return toModelPricing(record);
 }
 
-function supportsLongContextPricing(model: string): boolean {
-  const normalized = stripSnapshotSuffix(stripProviderPrefix(model));
-  return normalized === "gpt-5.4";
+function toModelPricing(
+  details: LocalModelPricingDetails,
+  fallback?: LocalModelPricingDetails
+): ModelPricing {
+  return {
+    inputCostPerMToken: details.inputCostPerMToken,
+    cachedInputCostPerMToken:
+      details.cachedInputCostPerMToken ??
+      fallback?.cachedInputCostPerMToken ??
+      fallback?.inputCostPerMToken ??
+      details.inputCostPerMToken,
+    outputCostPerMToken: details.outputCostPerMToken,
+  };
 }
