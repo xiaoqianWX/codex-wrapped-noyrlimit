@@ -77,6 +77,15 @@ describe("pricing", () => {
     expect(pricing).toEqual(expected);
   });
 
+  test("resolves GPT-5.5 pricing when the local table entry exists", async () => {
+    const expected = normalizeLocalPricing("gpt-5.5");
+    if (!expected) return;
+
+    const pricing = await getModelPricing("openai/gpt-5.5-2026-04-24");
+
+    expect(pricing).toEqual(expected);
+  });
+
   test("rejects close-but-wrong model names", async () => {
     const pricing = await getModelPricing("openai/gpt-5.4-min");
 

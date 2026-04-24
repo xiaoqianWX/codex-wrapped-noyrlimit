@@ -72,4 +72,9 @@ export const LOCAL_MODEL_PRICING: Record<string, LocalModelPricing> = {
     cachedInputCostPerMToken: 0.075,
     outputCostPerMToken: 4.5,
   },
+  "gpt-5.5": {
+    inputCostPerMToken: 5,
+    cachedInputCostPerMToken: 0.5,
+    outputCostPerMToken: 30,
+  },
 };
