@@ -86,6 +86,24 @@ describe("pricing", () => {
     expect(pricing).toEqual(expected);
   });
 
+  test.each([
+    ["gpt-5.6-sol", 5, 0.5, 30],
+    ["gpt-5.6-terra", 2.5, 0.25, 15],
+    ["gpt-5.6-luna", 1, 0.1, 6],
+  ])("resolves %s pricing", async (model, input, cached, output) => {
+    const pricing = await getModelPricing(`openai/${model}-2026-07-14`);
+
+    expect(pricing).toEqual({
+      inputCostPerMToken: input,
+      cachedInputCostPerMToken: cached,
+      outputCostPerMToken: output,
+    });
+  });
+
+  test("resolves the GPT-5.6 alias to Sol", async () => {
+    expect(await getModelPricing("gpt-5.6")).toEqual(await getModelPricing("gpt-5.6-sol"));
+  });
+
   test("rejects close-but-wrong model names", async () => {
     const pricing = await getModelPricing("openai/gpt-5.4-min");
 

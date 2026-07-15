@@ -77,4 +77,20 @@ export const LOCAL_MODEL_PRICING: Record<string, LocalModelPricing> = {
     cachedInputCostPerMToken: 0.5,
     outputCostPerMToken: 30,
   },
+  // https://developers.openai.com/api/docs/pricing
+  "gpt-5.6-sol": {
+    inputCostPerMToken: 5,
+    cachedInputCostPerMToken: 0.5,
+    outputCostPerMToken: 30,
+  },
+  "gpt-5.6-terra": {
+    inputCostPerMToken: 2.5,
+    cachedInputCostPerMToken: 0.25,
+    outputCostPerMToken: 15,
+  },
+  "gpt-5.6-luna": {
+    inputCostPerMToken: 1,
+    cachedInputCostPerMToken: 0.1,
+    outputCostPerMToken: 6,
+  },
 };

@@ -24,7 +24,10 @@ const MILLION = 1_000_000;
 export const LONG_CONTEXT_INPUT_THRESHOLD = 272_000;
 
 const PROVIDER_PREFIXES = ["openai/", "azure/", "openrouter/openai/"];
-const MODEL_ALIASES = new Map<string, string>([["gpt-5-codex", "gpt-5"]]);
+const MODEL_ALIASES = new Map<string, string>([
+  ["gpt-5-codex", "gpt-5"],
+  ["gpt-5.6", "gpt-5.6-sol"],
+]);
 
 const LOCAL_PRICING_MAP = new Map<string, LocalModelPricing>(Object.entries(LOCAL_MODEL_PRICING));
 
