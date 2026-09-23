@@ -1,7 +1,6 @@
 export interface LocalModelPricingDetails {
   inputCostPerMToken: number;
   cachedInputCostPerMToken?: number;
-  cacheWriteCostPerMToken?: number;
   outputCostPerMToken: number;
 }
 
@@ -86,72 +85,60 @@ export const LOCAL_MODEL_PRICING: Record<string, LocalModelPricing> = {
   "gpt-5.6-sol": {
     inputCostPerMToken: 4,
     cachedInputCostPerMToken: 0.4,
-    cacheWriteCostPerMToken: 5,
     outputCostPerMToken: 20,
     longContextPricing: {
       inputCostPerMToken: 8,
       cachedInputCostPerMToken: 0.8,
-      cacheWriteCostPerMToken: 10,
       outputCostPerMToken: 30,
     },
   },
   "gpt-5.6-terra": {
     inputCostPerMToken: 2,
     cachedInputCostPerMToken: 0.2,
-    cacheWriteCostPerMToken: 2.5,
     outputCostPerMToken: 12,
     longContextPricing: {
       inputCostPerMToken: 4,
       cachedInputCostPerMToken: 0.4,
-      cacheWriteCostPerMToken: 5,
       outputCostPerMToken: 18,
     },
   },
   "gpt-5.6-luna": {
     inputCostPerMToken: 0.2,
     cachedInputCostPerMToken: 0.02,
-    cacheWriteCostPerMToken: 0.25,
     outputCostPerMToken: 1.2,
     longContextPricing: {
       inputCostPerMToken: 0.4,
       cachedInputCostPerMToken: 0.04,
-      cacheWriteCostPerMToken: 0.5,
       outputCostPerMToken: 1.8,
     },
   },
   "gpt-6-astra": {
     inputCostPerMToken: 10,
     cachedInputCostPerMToken: 1,
-    cacheWriteCostPerMToken: 12.5,
     outputCostPerMToken: 50,
     longContextPricing: {
       inputCostPerMToken: 20,
       cachedInputCostPerMToken: 2,
-      cacheWriteCostPerMToken: 25,
       outputCostPerMToken: 75,
     },
   },
   "gpt-6-sol": {
     inputCostPerMToken: 2,
     cachedInputCostPerMToken: 0.2,
-    cacheWriteCostPerMToken: 2.5,
     outputCostPerMToken: 10,
     longContextPricing: {
       inputCostPerMToken: 4,
       cachedInputCostPerMToken: 0.4,
-      cacheWriteCostPerMToken: 5,
       outputCostPerMToken: 15,
     },
   },
   "gpt-6-luna": {
     inputCostPerMToken: 0.1,
     cachedInputCostPerMToken: 0.01,
-    cacheWriteCostPerMToken: 0.125,
     outputCostPerMToken: 0.5,
     longContextPricing: {
       inputCostPerMToken: 0.2,
       cachedInputCostPerMToken: 0.02,
-      cacheWriteCostPerMToken: 0.25,
       outputCostPerMToken: 0.75,
     },
   },

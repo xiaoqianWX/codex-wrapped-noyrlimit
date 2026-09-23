@@ -10,7 +10,6 @@ type SessionModelUsageTotals = {
   modelId: string;
   inputTokens: number;
   cachedInputTokens: number;
-  cacheWriteTokens: number;
   outputTokens: number;
   reasoningTokens: number;
   totalTokens: number;
@@ -34,7 +33,6 @@ export async function calculateUsageCostFromEvents(events: CodexUsageEvent[]): P
     const usage = getOrCreateSessionModelUsage(sessionModelUsageTotals, key, event.model);
     usage.inputTokens += event.inputTokens;
     usage.cachedInputTokens += event.cachedInputTokens;
-    usage.cacheWriteTokens += event.cacheWriteTokens;
     usage.outputTokens += event.outputTokens;
     usage.reasoningTokens += event.reasoningOutputTokens;
     usage.totalTokens += getEventTotal(event);
@@ -49,7 +47,6 @@ export async function calculateUsageCostFromEvents(events: CodexUsageEvent[]): P
     if (
       usage.inputTokens === 0 &&
       usage.cachedInputTokens === 0 &&
-      usage.cacheWriteTokens === 0 &&
       usage.outputTokens === 0 &&
       usage.reasoningTokens === 0
     ) {
@@ -63,7 +60,6 @@ export async function calculateUsageCostFromEvents(events: CodexUsageEvent[]): P
       {
         inputTokens: usage.inputTokens,
         cachedInputTokens: usage.cachedInputTokens,
-        cacheWriteTokens: usage.cacheWriteTokens,
         outputTokens: usage.outputTokens,
       },
       pricing
@@ -89,7 +85,6 @@ function getOrCreateSessionModelUsage(
     modelId,
     inputTokens: 0,
     cachedInputTokens: 0,
-    cacheWriteTokens: 0,
     outputTokens: 0,
     reasoningTokens: 0,
     totalTokens: 0,

@@ -7,7 +7,6 @@ import {
 export interface ModelPricing {
   inputCostPerMToken: number;
   cachedInputCostPerMToken: number;
-  cacheWriteCostPerMToken: number;
   outputCostPerMToken: number;
 }
 
@@ -18,7 +17,6 @@ export interface ModelPricingOptions {
 export interface TokenUsageTotals {
   inputTokens: number;
   cachedInputTokens: number;
-  cacheWriteTokens?: number;
   outputTokens: number;
 }
 
@@ -46,16 +44,14 @@ export function getLongContextBillingScope(model: string): "session" | "request"
 
 export function calculateCostUSD(usage: TokenUsageTotals, pricing: ModelPricing): number {
   const cachedInput = Math.min(usage.cachedInputTokens, usage.inputTokens);
-  const remainingInput = Math.max(usage.inputTokens - cachedInput, 0);
-  const cacheWrite = Math.min(Math.max(usage.cacheWriteTokens ?? 0, 0), remainingInput);
-  const nonCachedInput = remainingInput - cacheWrite;
+  // Cache writes, if any, stay within ordinary uncached input for this estimate.
+  const nonCachedInput = Math.max(usage.inputTokens - cachedInput, 0);
 
   const inputCost = (nonCachedInput / MILLION) * pricing.inputCostPerMToken;
   const cachedCost = (cachedInput / MILLION) * pricing.cachedInputCostPerMToken;
-  const cacheWriteCost = (cacheWrite / MILLION) * pricing.cacheWriteCostPerMToken;
   const outputCost = (usage.outputTokens / MILLION) * pricing.outputCostPerMToken;
 
-  return inputCost + cachedCost + cacheWriteCost + outputCost;
+  return inputCost + cachedCost + outputCost;
 }
 
 function findLocalPricing(model: string): LocalModelPricing | undefined {
@@ -125,11 +121,6 @@ function toModelPricing(
     cachedInputCostPerMToken:
       details.cachedInputCostPerMToken ??
       fallback?.cachedInputCostPerMToken ??
-      fallback?.inputCostPerMToken ??
-      details.inputCostPerMToken,
-    cacheWriteCostPerMToken:
-      details.cacheWriteCostPerMToken ??
-      fallback?.cacheWriteCostPerMToken ??
       fallback?.inputCostPerMToken ??
       details.inputCostPerMToken,
     outputCostPerMToken: details.outputCostPerMToken,
