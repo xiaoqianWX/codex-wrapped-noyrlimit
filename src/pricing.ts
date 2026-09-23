@@ -7,6 +7,7 @@ import {
 export interface ModelPricing {
   inputCostPerMToken: number;
   cachedInputCostPerMToken: number;
+  cacheWriteCostPerMToken: number;
   outputCostPerMToken: number;
 }
 
@@ -17,6 +18,7 @@ export interface ModelPricingOptions {
 export interface TokenUsageTotals {
   inputTokens: number;
   cachedInputTokens: number;
+  cacheWriteTokens?: number;
   outputTokens: number;
 }
 
@@ -27,31 +29,41 @@ const PROVIDER_PREFIXES = ["openai/", "azure/", "openrouter/openai/"];
 const MODEL_ALIASES = new Map<string, string>([
   ["gpt-5-codex", "gpt-5"],
   ["gpt-5.6", "gpt-5.6-sol"],
+  // The Daybreak Blue alias currently points to GPT-5.6 Sol.
+  ["gpt-daybreak-blue-latest", "gpt-5.6-sol"],
 ]);
 
 const LOCAL_PRICING_MAP = new Map<string, LocalModelPricing>(Object.entries(LOCAL_MODEL_PRICING));
 
 export async function getModelPricing(model: string, options: ModelPricingOptions = {}): Promise<ModelPricing | null> {
-  const candidates = createCandidates(model);
-  for (const candidate of candidates) {
-    const record = LOCAL_PRICING_MAP.get(candidate);
-    if (record) {
-      return normalizePricing(record, options);
-    }
-  }
+  const record = findLocalPricing(model);
+  return record ? normalizePricing(record, options) : null;
+}
 
-  return null;
+export function getLongContextBillingScope(model: string): "session" | "request" {
+  return findLocalPricing(model)?.longContextBillingScope ?? "request";
 }
 
 export function calculateCostUSD(usage: TokenUsageTotals, pricing: ModelPricing): number {
   const cachedInput = Math.min(usage.cachedInputTokens, usage.inputTokens);
-  const nonCachedInput = Math.max(usage.inputTokens - cachedInput, 0);
+  const remainingInput = Math.max(usage.inputTokens - cachedInput, 0);
+  const cacheWrite = Math.min(Math.max(usage.cacheWriteTokens ?? 0, 0), remainingInput);
+  const nonCachedInput = remainingInput - cacheWrite;
 
   const inputCost = (nonCachedInput / MILLION) * pricing.inputCostPerMToken;
   const cachedCost = (cachedInput / MILLION) * pricing.cachedInputCostPerMToken;
+  const cacheWriteCost = (cacheWrite / MILLION) * pricing.cacheWriteCostPerMToken;
   const outputCost = (usage.outputTokens / MILLION) * pricing.outputCostPerMToken;
 
-  return inputCost + cachedCost + outputCost;
+  return inputCost + cachedCost + cacheWriteCost + outputCost;
+}
+
+function findLocalPricing(model: string): LocalModelPricing | undefined {
+  for (const candidate of createCandidates(model)) {
+    const record = LOCAL_PRICING_MAP.get(candidate);
+    if (record) return record;
+  }
+  return undefined;
 }
 
 function createCandidates(model: string): string[] {
@@ -113,6 +125,11 @@ function toModelPricing(
     cachedInputCostPerMToken:
       details.cachedInputCostPerMToken ??
       fallback?.cachedInputCostPerMToken ??
+      fallback?.inputCostPerMToken ??
+      details.inputCostPerMToken,
+    cacheWriteCostPerMToken:
+      details.cacheWriteCostPerMToken ??
+      fallback?.cacheWriteCostPerMToken ??
       fallback?.inputCostPerMToken ??
       details.inputCostPerMToken,
     outputCostPerMToken: details.outputCostPerMToken,

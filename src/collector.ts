@@ -14,6 +14,7 @@ export interface CodexUsageEvent {
   model: string;
   inputTokens: number;
   cachedInputTokens: number;
+  cacheWriteTokens: number;
   outputTokens: number;
   reasoningOutputTokens: number;
   totalTokens: number;
@@ -236,6 +237,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
         if (
           delta.inputTokens === 0 &&
           delta.cachedInputTokens === 0 &&
+          delta.cacheWriteTokens === 0 &&
           delta.outputTokens === 0 &&
           delta.reasoningOutputTokens === 0
         ) {
@@ -270,6 +272,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
           model,
           inputTokens: delta.inputTokens,
           cachedInputTokens: delta.cachedInputTokens,
+          cacheWriteTokens: delta.cacheWriteTokens,
           outputTokens: delta.outputTokens,
           reasoningOutputTokens: delta.reasoningOutputTokens,
           totalTokens: delta.totalTokens,
@@ -400,6 +403,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
 type RawUsage = {
   input_tokens: number;
   cached_input_tokens: number;
+  cache_write_input_tokens: number;
   output_tokens: number;
   reasoning_output_tokens: number;
   total_tokens: number;
@@ -443,6 +447,8 @@ function normalizeRawUsage(value: unknown): RawUsage | null {
   const record = value as Record<string, unknown>;
   const input = ensureNumber(record.input_tokens);
   const cached = ensureNumber(record.cached_input_tokens ?? record.cache_read_input_tokens);
+  // Current Codex rollouts report this as a subset of input_tokens.
+  const cacheWrite = ensureNumber(record.cache_write_input_tokens ?? record.cache_write_tokens);
   const output = ensureNumber(record.output_tokens);
   const reasoning = ensureNumber(record.reasoning_output_tokens);
   const total = ensureNumber(record.total_tokens);
@@ -450,6 +456,7 @@ function normalizeRawUsage(value: unknown): RawUsage | null {
   return {
     input_tokens: input,
     cached_input_tokens: cached,
+    cache_write_input_tokens: cacheWrite,
     output_tokens: output,
     reasoning_output_tokens: reasoning,
     total_tokens: total > 0 ? total : input + output,
@@ -460,6 +467,10 @@ function subtractRawUsage(current: RawUsage, previous: RawUsage | null): RawUsag
   return {
     input_tokens: Math.max(current.input_tokens - (previous?.input_tokens ?? 0), 0),
     cached_input_tokens: Math.max(current.cached_input_tokens - (previous?.cached_input_tokens ?? 0), 0),
+    cache_write_input_tokens: Math.max(
+      current.cache_write_input_tokens - (previous?.cache_write_input_tokens ?? 0),
+      0
+    ),
     output_tokens: Math.max(current.output_tokens - (previous?.output_tokens ?? 0), 0),
     reasoning_output_tokens: Math.max(current.reasoning_output_tokens - (previous?.reasoning_output_tokens ?? 0), 0),
     total_tokens: Math.max(current.total_tokens - (previous?.total_tokens ?? 0), 0),
@@ -469,9 +480,11 @@ function subtractRawUsage(current: RawUsage, previous: RawUsage | null): RawUsag
 function convertToDelta(raw: RawUsage): Omit<CodexUsageEvent, "sessionKey" | "timestamp" | "model"> {
   const total = raw.total_tokens > 0 ? raw.total_tokens : raw.input_tokens + raw.output_tokens;
   const cached = Math.min(raw.cached_input_tokens, raw.input_tokens);
+  const cacheWrite = Math.min(raw.cache_write_input_tokens, Math.max(raw.input_tokens - cached, 0));
   return {
     inputTokens: raw.input_tokens,
     cachedInputTokens: cached,
+    cacheWriteTokens: cacheWrite,
     outputTokens: raw.output_tokens,
     reasoningOutputTokens: raw.reasoning_output_tokens,
     totalTokens: total,
@@ -531,6 +544,7 @@ function createTokenEventSignature(event: CodexUsageEvent): string {
     event.model,
     event.inputTokens,
     event.cachedInputTokens,
+    event.cacheWriteTokens,
     event.outputTokens,
     event.reasoningOutputTokens,
     event.totalTokens,

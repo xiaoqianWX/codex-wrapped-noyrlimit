@@ -9,6 +9,7 @@ function createEvent(overrides: Partial<CodexUsageEvent>): CodexUsageEvent {
     model: "gpt-5.4",
     inputTokens: 0,
     cachedInputTokens: 0,
+    cacheWriteTokens: 0,
     outputTokens: 0,
     reasoningOutputTokens: 0,
     totalTokens: 0,
@@ -82,5 +83,26 @@ describe("calculateUsageCostFromEvents", () => {
     ]);
 
     expect(cost).toBeCloseTo(2.65, 8);
+  });
+
+  test("uses request-scoped long-context pricing for GPT-6", async () => {
+    const cost = await calculateUsageCostFromEvents([
+      createEvent({
+        model: "gpt-6-sol",
+        inputTokens: 300_000,
+        cachedInputTokens: 100_000,
+        cacheWriteTokens: 100_000,
+        outputTokens: 100_000,
+        totalTokens: 400_000,
+      }),
+      createEvent({
+        model: "gpt-6-sol",
+        inputTokens: 10_000,
+        outputTokens: 10_000,
+        totalTokens: 20_000,
+      }),
+    ]);
+
+    expect(cost).toBeCloseTo(2.56, 8);
   });
 });
