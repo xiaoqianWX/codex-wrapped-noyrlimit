@@ -110,10 +110,17 @@ describe("pricing", () => {
     expect(await getModelPricing("gpt-daybreak-blue-latest")).toEqual(await getModelPricing("gpt-5.6-sol"));
   });
 
-  test("prices GPT-6 uncached input at the ordinary input rate", async () => {
+  test("excludes reported cache writes from GPT-6 input cost", async () => {
     const pricing = await getModelPricing("gpt-6-sol");
 
     expect(pricing).not.toBeNull();
+    expect(calculateCostUSD({
+      inputTokens: 1_000_000,
+      cachedInputTokens: 200_000,
+      cacheWriteTokens: 300_000,
+      outputTokens: 100_000,
+    }, pricing!)).toBeCloseTo(2.04, 8);
+
     expect(calculateCostUSD({
       inputTokens: 1_000_000,
       cachedInputTokens: 200_000,

@@ -17,6 +17,7 @@ export interface ModelPricingOptions {
 export interface TokenUsageTotals {
   inputTokens: number;
   cachedInputTokens: number;
+  cacheWriteTokens?: number;
   outputTokens: number;
 }
 
@@ -44,8 +45,10 @@ export function getLongContextBillingScope(model: string): "session" | "request"
 
 export function calculateCostUSD(usage: TokenUsageTotals, pricing: ModelPricing): number {
   const cachedInput = Math.min(usage.cachedInputTokens, usage.inputTokens);
-  // Cache writes, if any, stay within ordinary uncached input for this estimate.
-  const nonCachedInput = Math.max(usage.inputTokens - cachedInput, 0);
+  const remainingInput = Math.max(usage.inputTokens - cachedInput, 0);
+  // This estimate treats reported cache writes as unbilled.
+  const cacheWrite = Math.min(Math.max(usage.cacheWriteTokens ?? 0, 0), remainingInput);
+  const nonCachedInput = remainingInput - cacheWrite;
 
   const inputCost = (nonCachedInput / MILLION) * pricing.inputCostPerMToken;
   const cachedCost = (cachedInput / MILLION) * pricing.cachedInputCostPerMToken;

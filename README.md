@@ -102,6 +102,7 @@ src/pricing-data.ts
 ```
 
 If a model is missing from that table, cost is treated as unavailable for that model until it is added in a new release.
+Cost estimates treat cache-write tokens reported in Codex logs as unbilled.
 
 ## Building
 
