@@ -1,6 +1,7 @@
 // Data collector - reads Codex CLI storage and returns raw data
 
 import { readdir, readFile, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import os from "node:os";
 
@@ -123,6 +124,10 @@ export async function getCodexFirstPromptTimestamp(): Promise<number | null> {
 
 export async function collectCodexUsageData(year: number): Promise<CodexUsageData> {
   const files = await listAllCodexSessionFiles();
+  return collectCodexUsageDataFromFiles(year, files);
+}
+
+export async function collectCodexUsageDataFromFiles(year: number, files: string[]): Promise<CodexUsageData> {
   const sessions: SessionUsage[] = [];
 
   for (const filePath of files) {
@@ -193,6 +198,22 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
         if (model) {
           currentModel = model;
           currentModelIsFallback = false;
+        }
+        continue;
+      }
+
+      if (entryType === "response_item") {
+        const payload = entry?.payload;
+        if (isUserResponseMessage(payload)) {
+          const timestamp = getResponseMessageTimestamp(entry?.timestamp, payload);
+          if (timestamp && isTimestampInYear(timestamp, year)) {
+            const id = asNonEmptyString(payload.id);
+            userMessages.push({
+              timestamp,
+              id,
+              signature: id ?? createResponseMessageSignature(payload),
+            });
+          }
         }
         continue;
       }
@@ -305,6 +326,7 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
   const events: CodexUsageEvent[] = [];
   const dailyActivity = new Map<string, number>();
   const projects = new Set<string>();
+  const seenMessageIds = new Set<string>();
   let totalMessages = 0;
   let totalSessions = 0;
   let earliestSessionDate: Date | null = null;
@@ -373,6 +395,8 @@ export async function collectCodexUsageData(year: number): Promise<CodexUsageDat
     }
 
     for (const message of session.userMessages.slice(messageStartIndex)) {
+      if (message.id && seenMessageIds.has(message.id)) continue;
+      if (message.id) seenMessageIds.add(message.id);
       totalMessages += 1;
       const dateKey = formatDateKey(new Date(message.timestamp));
       dailyActivity.set(dateKey, (dailyActivity.get(dateKey) || 0) + 1);
@@ -411,6 +435,7 @@ type RawUsage = {
 
 type SessionUserMessage = {
   timestamp: string;
+  id?: string;
   signature: string;
 };
 
@@ -536,6 +561,65 @@ function createUserMessageSignature(payload: Record<string, unknown>): string {
     imageCount,
     localImageCount,
   });
+}
+
+function isUserResponseMessage(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Record<string, unknown>;
+  if (payload.type !== "message" || payload.role !== "user") return false;
+
+  const metadata = payload.internal_chat_message_metadata_passthrough;
+  if (metadata && typeof metadata === "object") {
+    const kinds = (metadata as Record<string, unknown>).content_item_kinds;
+    if (Array.isArray(kinds) && kinds.length > 0) {
+      return kinds.some((kind) => typeof kind === "string" && kind.startsWith("user."));
+    }
+  }
+
+  if (!Array.isArray(payload.content)) return false;
+  const text = payload.content
+    .filter((item): item is Record<string, unknown> => item && typeof item === "object" && item.type === "input_text")
+    .map((item) => asNonEmptyString(item.text) ?? "")
+    .join("\n")
+    .trimStart();
+  if (
+    text.startsWith("# AGENTS.md instructions") ||
+    text.startsWith("<environment_context>") ||
+    text.startsWith("<INSTRUCTIONS>")
+  ) {
+    return false;
+  }
+
+  return payload.content.some(
+    (item) => item && typeof item === "object" &&
+      ["input_text", "input_image", "input_file", "input_audio"].includes(item.type) &&
+      (item.type !== "input_text" || asNonEmptyString(item.text) !== undefined)
+  );
+}
+
+function getResponseMessageTimestamp(entryTimestamp: unknown, payload: Record<string, unknown>): string | undefined {
+  const metadata = payload.internal_chat_message_metadata_passthrough;
+  if (metadata && typeof metadata === "object") {
+    const createTime = (metadata as Record<string, unknown>).create_time;
+    if (typeof createTime === "number" && Number.isFinite(createTime)) {
+      const date = new Date(createTime * 1000);
+      if (!Number.isNaN(date.getTime())) return date.toISOString();
+    }
+  }
+
+  // Message IDs use UUIDv7, whose first 12 hex digits encode creation time.
+  const id = asNonEmptyString(payload.id);
+  const match = id?.match(/^msg_([0-9a-f]{8})-([0-9a-f]{4})-7[0-9a-f]{3}-/i);
+  if (match) {
+    const date = new Date(Number.parseInt(match[1] + match[2], 16));
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+
+  return asNonEmptyString(entryTimestamp);
+}
+
+function createResponseMessageSignature(payload: Record<string, unknown>): string {
+  return createHash("sha256").update(JSON.stringify(payload.content ?? [])).digest("hex");
 }
 
 function createTokenEventSignature(event: CodexUsageEvent): string {
