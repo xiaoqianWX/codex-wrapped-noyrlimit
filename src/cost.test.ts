@@ -85,10 +85,13 @@ describe("calculateUsageCostFromEvents", () => {
     expect(cost).toBeCloseTo(2.65, 8);
   });
 
-  test("uses request-scoped long-context pricing for GPT-6", async () => {
+  test.each([
+    ["gpt-6-sol", 2.06],
+    ["gpt-6.1-sol", 2.04],
+  ])("uses request-scoped long-context pricing for %s", async (model, expectedCost) => {
     const cost = await calculateUsageCostFromEvents([
       createEvent({
-        model: "gpt-6-sol",
+        model,
         inputTokens: 300_000,
         cachedInputTokens: 100_000,
         cacheWriteTokens: 100_000,
@@ -96,13 +99,36 @@ describe("calculateUsageCostFromEvents", () => {
         totalTokens: 400_000,
       }),
       createEvent({
-        model: "gpt-6-sol",
+        model,
         inputTokens: 10_000,
         outputTokens: 10_000,
         totalTokens: 20_000,
       }),
     ]);
 
-    expect(cost).toBeCloseTo(2.06, 8);
+    expect(cost).toBeCloseTo(expectedCost, 8);
+  });
+
+  test("uses GPT-6.1 Sol's long-context rates only above 272K input tokens", async () => {
+    const cost = await calculateUsageCostFromEvents([
+      createEvent({
+        model: "gpt-6.1-sol",
+        inputTokens: 272_000,
+        cachedInputTokens: 200_000,
+        cacheWriteTokens: 10_000,
+        outputTokens: 1_000,
+        totalTokens: 273_000,
+      }),
+      createEvent({
+        model: "gpt-6.1-sol",
+        inputTokens: 272_001,
+        cachedInputTokens: 200_000,
+        cacheWriteTokens: 10_000,
+        outputTokens: 1_000,
+        totalTokens: 273_001,
+      }),
+    ]);
+
+    expect(cost).toBeCloseTo(0.457004, 8);
   });
 });
