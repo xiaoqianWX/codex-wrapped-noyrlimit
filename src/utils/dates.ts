@@ -30,8 +30,9 @@ export function generateWeeksForYear(year: number): string[][] {
     // Only include dates within the year
     if (currentDate.getFullYear() === year && currentDate <= endDate) {
       currentWeek.push(dateStr);
-    } else if (currentDate.getFullYear() === year) {
-      // Pad with empty strings for dates outside range but in the week
+    } else if (currentDate.getFullYear() <= year) {
+      // Pad with empty strings for dates outside range but in the week, including the
+      // previous year's days in the first week, so every date stays in its weekday row
       currentWeek.push("");
     }
 
