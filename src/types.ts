@@ -112,6 +112,7 @@ export interface CodexStats {
     date: string;
     count: number;
     formattedDate: string;
+    weekdayName: string; // Weekday of `date`, e.g. "Saturday"
   } | null;
 
   // Weekday activity distribution (0=Sunday, 6=Saturday)
