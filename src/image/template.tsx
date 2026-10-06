@@ -59,7 +59,7 @@ export function WrappedTemplate({ stats }: { stats: CodexStats }) {
         />
         <HeroStatItem
           label="Most Active Day"
-          subtitle={stats.weekdayActivity.mostActiveDayName}
+          subtitle={stats.mostActiveDay?.weekdayName}
           value={stats.mostActiveDay?.formattedDate ?? "N/A"}
         />
 

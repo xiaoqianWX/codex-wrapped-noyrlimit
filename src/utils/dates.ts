@@ -30,8 +30,9 @@ export function generateWeeksForYear(year: number): string[][] {
     // Only include dates within the year
     if (currentDate.getFullYear() === year && currentDate <= endDate) {
       currentWeek.push(dateStr);
-    } else if (currentDate.getFullYear() === year) {
-      // Pad with empty strings for dates outside range but in the week
+    } else if (currentDate.getFullYear() <= year) {
+      // Pad with empty strings for dates outside range but in the week, including the
+      // previous year's days in the first week, so every date stays in its weekday row
       currentWeek.push("");
     }
 
@@ -55,6 +56,13 @@ export function generateWeeksForYear(year: number): string[][] {
   }
 
   return weeks;
+}
+
+// Parse a YYYY-MM-DD key as a local date. `new Date("YYYY-MM-DD")` parses as UTC midnight,
+// which falls on the previous local day in time zones behind UTC.
+export function parseDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day);
 }
 
 export function formatDateKey(date: Date): string {
