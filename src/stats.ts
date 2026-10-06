@@ -2,6 +2,7 @@ import type { CodexStats, ModelStats, ProviderStats, WeekdayActivity } from "./t
 import { collectCodexUsageData, getCodexFirstPromptTimestamp, type CodexUsageEvent } from "./collector";
 import { calculateUsageCostFromEvents } from "./cost";
 import { getModelDisplayName, getModelProvider, getProviderDisplayName } from "./models";
+import { parseDateKey } from "./utils/dates";
 
 type ModelUsageTotals = {
   inputTokens: number;
@@ -14,12 +15,7 @@ type ModelUsageTotals = {
 export async function calculateStats(year: number): Promise<CodexStats> {
   const usageData = await collectCodexUsageData(year);
   const dailyActivity = usageData.dailyActivity;
-  const weekdayCounts: [number, number, number, number, number, number, number] = [0, 0, 0, 0, 0, 0, 0];
-
-  for (const [date, count] of dailyActivity.entries()) {
-    const weekday = new Date(date).getDay();
-    weekdayCounts[weekday] += count;
-  }
+  const weekdayCounts = countActivityByWeekday(dailyActivity);
 
   const modelUsageTotals = new Map<string, ModelUsageTotals>();
 
@@ -124,6 +120,19 @@ export async function calculateStats(year: number): Promise<CodexStats> {
     mostActiveDay,
     weekdayActivity,
   };
+}
+
+export function countActivityByWeekday(
+  dailyActivity: Map<string, number>
+): [number, number, number, number, number, number, number] {
+  const weekdayCounts: [number, number, number, number, number, number, number] = [0, 0, 0, 0, 0, 0, 0];
+
+  for (const [date, count] of dailyActivity.entries()) {
+    const weekday = parseDateKey(date).getDay();
+    weekdayCounts[weekday] += count;
+  }
+
+  return weekdayCounts;
 }
 
 function resolveProviderId(modelId: string): string {

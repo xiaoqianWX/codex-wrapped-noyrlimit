@@ -57,6 +57,13 @@ export function generateWeeksForYear(year: number): string[][] {
   return weeks;
 }
 
+// Parse a YYYY-MM-DD key as a local date. `new Date("YYYY-MM-DD")` parses as UTC midnight,
+// which falls on the previous local day in time zones behind UTC.
+export function parseDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
 export function formatDateKey(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
