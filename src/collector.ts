@@ -2,12 +2,14 @@
 
 import { readdir, readFile, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import os from "node:os";
 
 const CODEX_DATA_PATH = join(os.homedir(), ".codex");
 const CODEX_HISTORY_PATH = join(CODEX_DATA_PATH, "history.jsonl");
 const CODEX_SESSIONS_PATH = join(CODEX_DATA_PATH, "sessions");
+const CODEX_ARCHIVED_SESSIONS_PATH = join(CODEX_DATA_PATH, "archived_sessions");
+const ZSTD_SUFFIX = ".zst";
 
 export interface CodexUsageEvent {
   sessionKey: string;
@@ -59,7 +61,44 @@ async function listAllCodexSessionFiles(): Promise<string[]> {
     files.push(...(await listCodexSessionFilesInDirectory(yearPath)));
   }
 
-  return files;
+  try {
+    const entries = await readdir(CODEX_ARCHIVED_SESSIONS_PATH, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && isRolloutFile(entry.name)) {
+        files.push(join(CODEX_ARCHIVED_SESSIONS_PATH, entry.name));
+      }
+    }
+  } catch {
+    // No archived sessions
+  }
+
+  return dedupeRolloutFiles(files);
+}
+
+// Codex now stores finished rollouts as `.jsonl.zst` and moves archived threads to
+// `archived_sessions/`.
+function isRolloutFile(name: string): boolean {
+  return name.endsWith(".jsonl") || name.endsWith(`.jsonl${ZSTD_SUFFIX}`);
+}
+
+// A rollout can briefly exist both plain and compressed; the plain file is the live one.
+export function dedupeRolloutFiles(files: string[]): string[] {
+  const byRollout = new Map<string, string>();
+  for (const file of files) {
+    const key = basename(file).replace(/\.zst$/, "");
+    const existing = byRollout.get(key);
+    if (!existing || (existing.endsWith(ZSTD_SUFFIX) && !file.endsWith(ZSTD_SUFFIX))) {
+      byRollout.set(key, file);
+    }
+  }
+  return Array.from(byRollout.values());
+}
+
+async function readRolloutFile(filePath: string): Promise<string> {
+  if (filePath.endsWith(ZSTD_SUFFIX)) {
+    return new TextDecoder().decode(Bun.zstdDecompressSync(await readFile(filePath)));
+  }
+  return readFile(filePath, "utf8");
 }
 
 async function listCodexSessionFilesInDirectory(yearPath: string): Promise<string[]> {
@@ -87,7 +126,7 @@ async function listCodexSessionFilesInDirectory(yearPath: string): Promise<strin
       try {
         const entries = await readdir(dayPath, { withFileTypes: true });
         for (const entry of entries) {
-          if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+          if (entry.isFile() && isRolloutFile(entry.name)) {
             files.push(join(dayPath, entry.name));
           }
         }
@@ -133,7 +172,7 @@ export async function collectCodexUsageDataFromFiles(year: number, files: string
   for (const filePath of files) {
     let fileContents = "";
     try {
-      fileContents = await readFile(filePath, "utf8");
+      fileContents = await readRolloutFile(filePath);
     } catch {
       continue;
     }

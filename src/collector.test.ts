@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { collectCodexUsageDataFromFiles } from "./collector";
+import { collectCodexUsageDataFromFiles, dedupeRolloutFiles } from "./collector";
 
 function line(timestamp: string, type: string, payload: Record<string, unknown>): string {
   return JSON.stringify({ timestamp, type, payload });
@@ -95,5 +95,42 @@ describe("collectCodexUsageDataFromFiles", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  test("reads zstd-compressed rollouts", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "codex-wrapped-collector-"));
+    const path = join(dir, "rollout.jsonl.zst");
+    const created = "2026-09-20T12:00:00.000Z";
+
+    try {
+      const rollout = [
+        line(created, "session_meta", { id: "compressed", cwd: "/project" }),
+        userMessage(created, "msg_prompt", "Compressed prompt", created),
+      ].join("\n");
+      await writeFile(path, Bun.zstdCompressSync(new TextEncoder().encode(rollout)));
+
+      const data = await collectCodexUsageDataFromFiles(2026, [path]);
+
+      expect(data.totalSessions).toBe(1);
+      expect(data.totalMessages).toBe(1);
+      expect([...data.dailyActivity]).toEqual([["2026-09-20", 1]]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("dedupeRolloutFiles", () => {
+  test("keeps one file per rollout, preferring the live plain copy", () => {
+    expect(dedupeRolloutFiles([
+      "/codex/sessions/2026/09/20/rollout-a.jsonl.zst",
+      "/codex/sessions/2026/09/20/rollout-a.jsonl",
+      "/codex/archived_sessions/rollout-b.jsonl.zst",
+      "/codex/sessions/2026/09/21/rollout-c.jsonl",
+    ])).toEqual([
+      "/codex/sessions/2026/09/20/rollout-a.jsonl",
+      "/codex/archived_sessions/rollout-b.jsonl.zst",
+      "/codex/sessions/2026/09/21/rollout-c.jsonl",
+    ]);
   });
 });

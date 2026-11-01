@@ -90,8 +90,10 @@ The tool generates:
 Codex Wrapped reads data from your local Codex CLI installation:
 
 ```
-~/.codex/ (history.jsonl, sessions, logs)
+~/.codex/ (history.jsonl, sessions, archived_sessions, logs)
 ```
+
+Both plain (`.jsonl`) and zstd-compressed (`.jsonl.zst`) session rollouts are read.
 
 No data is sent anywhere. Everything is processed locally.
 
