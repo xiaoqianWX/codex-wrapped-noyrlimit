@@ -13,7 +13,7 @@ import { isWrappedAvailable } from "./utils/dates";
 import { formatCostFull, formatNumber, formatNumberFull } from "./utils/format";
 import type { CodexStats } from "./types";
 
-const VERSION = "1.0.19";
+const VERSION = "1.0.20";
 
 function printHelp() {
   console.log(`
@@ -100,16 +100,18 @@ async function main() {
   spinner.stop("Found your stats!");
 
   // Display summary
+  const row = (label: string, value: string) => `${`${label}:`.padEnd(15)}${value}`;
   const summaryLines = [
-    `Sessions:      ${formatNumber(stats.totalSessions)}`,
-    `Messages:      ${formatNumber(stats.totalMessages)}`,
-    `Total Tokens:  ${formatNumber(stats.totalTokens)}`,
-    stats.totalCachedInputTokens > 0 && `Cache Read:   ${formatNumber(stats.totalCachedInputTokens)}`,
-    stats.totalReasoningTokens > 0 && `Reasoning:     ${formatNumber(stats.totalReasoningTokens)}`,
-    `Projects:      ${formatNumber(stats.totalProjects)}`,
-    `Streak:        ${stats.maxStreak} days`,
-    stats.hasUsageCost && `Usage Cost:    ${stats.totalCost.toFixed(2)}$`,
-    stats.mostActiveDay && `Most Active:   ${stats.mostActiveDay.formattedDate}`,
+    row("Sessions", formatNumber(stats.totalSessions)),
+    row("Messages", formatNumber(stats.totalMessages)),
+    row("Total Tokens", formatNumber(stats.totalTokens)),
+    stats.totalCachedInputTokens > 0 && row("Cache Read", formatNumber(stats.totalCachedInputTokens)),
+    stats.totalOutputTokens > 0 && row("Output", formatNumber(stats.totalOutputTokens)),
+    stats.totalReasoningTokens > 0 && row("Reasoning", formatNumber(stats.totalReasoningTokens)),
+    row("Projects", formatNumber(stats.totalProjects)),
+    row("Streak", `${stats.maxStreak} days`),
+    stats.hasUsageCost && row("Usage Cost", `${stats.totalCost.toFixed(2)}$`),
+    stats.mostActiveDay && row("Most Active", stats.mostActiveDay.formattedDate),
   ].filter(Boolean);
 
   p.note(summaryLines.join("\n"), `Your ${requestedYear} in Codex`);

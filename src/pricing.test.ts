@@ -93,6 +93,7 @@ describe("pricing", () => {
     ["gpt-6-astra", [10, 1, 50], [20, 2, 75]],
     ["gpt-6-sol", [2, 0.2, 10], [4, 0.4, 15]],
     ["gpt-6.1-sol", [2, 0.1, 10], [4, 0.2, 15]],
+    ["gpt-6.1-terra", [1, 0.05, 5], [2, 0.1, 7.5]],
     ["gpt-6-luna", [0.1, 0.01, 0.5], [0.2, 0.02, 0.75]],
   ])("resolves %s standard short- and long-context pricing", async (model, short, long) => {
     const modelId = `openai/${model}-2026-09-22`;
@@ -137,5 +138,6 @@ describe("pricing", () => {
     expect(pricing).toBeNull();
     expect(await getModelPricing("gpt-6.1")).toBeNull();
     expect(await getModelPricing("gpt-6.1-sol-mini")).toBeNull();
+    expect(await getModelPricing("gpt-6.1-terra-mini")).toBeNull();
   });
 });

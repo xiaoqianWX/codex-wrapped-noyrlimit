@@ -143,6 +143,17 @@ export const LOCAL_MODEL_PRICING: Record<string, LocalModelPricing> = {
       outputCostPerMToken: 15,
     },
   },
+  "gpt-6.1-terra": {
+    inputCostPerMToken: 1,
+    cachedInputCostPerMToken: 0.05,
+    outputCostPerMToken: 5,
+    longContextBillingScope: "request",
+    longContextPricing: {
+      inputCostPerMToken: 2,
+      cachedInputCostPerMToken: 0.1,
+      outputCostPerMToken: 7.5,
+    },
+  },
   "gpt-6-luna": {
     inputCostPerMToken: 0.1,
     cachedInputCostPerMToken: 0.01,
