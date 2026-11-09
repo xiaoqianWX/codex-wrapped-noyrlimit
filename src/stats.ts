@@ -2,6 +2,9 @@ import type { CodexStats, ModelStats, ProviderStats, WeekdayActivity } from "./t
 import { collectCodexUsageData, getCodexFirstPromptTimestamp, type CodexUsageEvent } from "./collector";
 import { calculateUsageCostFromEvents } from "./cost";
 import { getModelDisplayName, getModelProvider, getProviderDisplayName } from "./models";
+import { parseDateKey } from "./utils/dates";
+
+const WEEKDAY_NAMES_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 type ModelUsageTotals = {
   inputTokens: number;
@@ -14,12 +17,7 @@ type ModelUsageTotals = {
 export async function calculateStats(year: number): Promise<CodexStats> {
   const usageData = await collectCodexUsageData(year);
   const dailyActivity = usageData.dailyActivity;
-  const weekdayCounts: [number, number, number, number, number, number, number] = [0, 0, 0, 0, 0, 0, 0];
-
-  for (const [date, count] of dailyActivity.entries()) {
-    const weekday = new Date(date).getDay();
-    weekdayCounts[weekday] += count;
-  }
+  const weekdayCounts = countActivityByWeekday(dailyActivity);
 
   const modelUsageTotals = new Map<string, ModelUsageTotals>();
 
@@ -124,6 +122,19 @@ export async function calculateStats(year: number): Promise<CodexStats> {
     mostActiveDay,
     weekdayActivity,
   };
+}
+
+export function countActivityByWeekday(
+  dailyActivity: Map<string, number>
+): [number, number, number, number, number, number, number] {
+  const weekdayCounts: [number, number, number, number, number, number, number] = [0, 0, 0, 0, 0, 0, 0];
+
+  for (const [date, count] of dailyActivity.entries()) {
+    const weekday = parseDateKey(date).getDay();
+    weekdayCounts[weekday] += count;
+  }
+
+  return weekdayCounts;
 }
 
 function resolveProviderId(modelId: string): string {
@@ -237,7 +248,7 @@ function countStreakBackwards(dailyActivity: Map<string, number>, startDate: Dat
   return streak;
 }
 
-function findMostActiveDay(dailyActivity: Map<string, number>): { date: string; count: number; formattedDate: string } | null {
+export function findMostActiveDay(dailyActivity: Map<string, number>): CodexStats["mostActiveDay"] {
   if (dailyActivity.size === 0) {
     return null;
   }
@@ -257,8 +268,7 @@ function findMostActiveDay(dailyActivity: Map<string, number>): { date: string; 
   }
 
   // Parse date string (YYYY-MM-DD) and format as "Mon D"
-  const [year, month, day] = maxDate.split("-").map(Number);
-  const dateObj = new Date(year, month - 1, day);
+  const dateObj = parseDateKey(maxDate);
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const formattedDate = `${monthNames[dateObj.getMonth()]} ${dateObj.getDate()}`;
 
@@ -266,12 +276,11 @@ function findMostActiveDay(dailyActivity: Map<string, number>): { date: string; 
     date: maxDate,
     count: maxCount,
     formattedDate,
+    weekdayName: WEEKDAY_NAMES_FULL[dateObj.getDay()],
   };
 }
 
 function buildWeekdayActivity(counts: [number, number, number, number, number, number, number]): WeekdayActivity {
-  const WEEKDAY_NAMES_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
   let mostActiveDay = 0;
   let maxCount = 0;
   for (let i = 0; i < 7; i++) {
